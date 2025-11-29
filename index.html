@@ -15,16 +15,17 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Supabase JS (Caricato in modo sincrono per sicurezza) -->
+    <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     
+    <!-- Stili Custom -->
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; background-color: #f3f4f6; }
         html, body, #root { height: 100%; margin: 0; padding: 0; overflow: hidden; }
         
-        /* Error Banner */
-        #sys-error { display: none; position: absolute; top: 0; left: 0; width: 100%; background: #fee2e2; color: #991b1b; padding: 15px; z-index: 9999; text-align: center; border-bottom: 2px solid #b91c1c; font-weight: bold;}
+        /* Error Overlay */
+        #error-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fee2e2; color: #7f1d1d; padding: 20px; z-index: 10000; font-family: monospace; overflow: auto; }
 
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -37,50 +38,47 @@
 </head>
 <body>
 
-    <div id="sys-error"></div>
+    <div id="error-overlay">
+        <h2 style="font-weight: bold; font-size: 1.2em; margin-bottom: 10px;">Errore di Avvio</h2>
+        <p id="error-msg">Caricamento...</p>
+    </div>
+
     <div id="root"></div>
 
     <script>
-        // Controllo preliminare librerie
-        window.onload = function() {
-            if (!window.supabase) {
-                document.getElementById('sys-error').style.display = 'block';
-                document.getElementById('sys-error').innerText = "ERRORE CRITICO: La libreria Supabase non è stata caricata. Controlla la tua connessione internet o firewall.";
-            }
+        window.onerror = function(message, source, lineno, colno, error) {
+            document.getElementById('error-overlay').style.display = 'block';
+            document.getElementById('error-msg').innerHTML = `<strong>Errore:</strong> ${message}<br><br><strong>Riga:</strong> ${lineno}:${colno}<br><strong>Stack:</strong> ${error ? error.stack : 'N/A'}`;
         };
     </script>
 
     <script type="text/babel">
         
         // ==========================================
-        // AREA CONFIGURAZIONE - MODIFICA QUI SOTTO
+        // CONFIGURAZIONE SUPABASE
         // ==========================================
-        
-        const SUPABASE_URL = "https://wrduyaxkwfuybbedlybj.supabase.co"; 
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndyZHV5YXhrd2Z1eWJiZWRseWJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ0NDc4NTAsImV4cCI6MjA4MDAyMzg1MH0.iJbS1v2QDbU5pQDwSHDTXtvY9ucnQ87b5jX_c7Ikgao";
-
+        const SUPABASE_URL = "INSERISCI_URL_QUI"; 
+        const SUPABASE_ANON_KEY = "INSERISCI_KEY_QUI";
         // ==========================================
 
-        // Inizializzazione Client Sicura
         let supabase = null;
-        const checkConfig = () => {
-            if (!SUPABASE_URL || SUPABASE_URL.includes("https://wrduyaxkwfuybbedlybj.supabase.co")) return "URL Mancante";
-            if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndyZHV5YXhrd2Z1eWJiZWRseWJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ0NDc4NTAsImV4cCI6MjA4MDAyMzg1MH0.iJbS1v2QDbU5pQDwSHDTXtvY9ucnQ87b5jX_c7Ikgao")) return "KEY Mancante";
-            return null;
-        };
+        let configError = null;
 
-        const configError = checkConfig();
-        if (!configError && window.supabase) {
+        if (!SUPABASE_URL || SUPABASE_URL.includes("INSERISCI_URL")) {
+            configError = "URL o KEY di Supabase mancanti nel codice HTML (righe 60-61).";
+        } else if (window.supabase) {
             try {
                 supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             } catch (e) {
-                console.error("Errore creazione client Supabase:", e);
+                configError = "Errore inizializzazione Supabase: " + e.message;
             }
+        } else {
+            configError = "Libreria Supabase non caricata. Controlla la connessione.";
         }
 
         const { useState, useMemo, useEffect, useRef, Fragment } = React;
 
-        // Helper JSON
+        // Helper JSON sicuro
         const safeJSONParse = (key, fallback) => {
             try {
                 const item = localStorage.getItem(key);
@@ -166,36 +164,24 @@
 
             const handleAuth = async (e) => {
                 e.preventDefault();
-                if(dbError) return setError("Impossibile connettersi al database.");
+                if(dbError) return setError(dbError);
                 setError('');
                 setLoading(true);
                 const regex = /^[a-zA-Z0-9]+$/;
                 if (!regex.test(username)) { setError('Usa solo lettere e numeri.'); setLoading(false); return; }
                 
                 try {
-                    if (isLogin) {
-                        await onLogin(username, password);
-                    } else {
-                        await onRegister(username, password);
-                    }
+                    if (isLogin) { await onLogin(username, password); } else { await onRegister(username, password); }
                 } catch (err) {
-                    setError(err.message || "Errore durante l'operazione.");
+                    setError(err.message || "Errore. Controlla le credenziali.");
                 }
                 setLoading(false);
             };
 
             return (
                 <div className="flex flex-col items-center justify-center h-screen bg-slate-900 p-6 text-white">
-                    <div className="mb-8 text-center"><h1 className="text-4xl font-bold mb-2">NOM <span className="text-orange-500">BUSINESS</span></h1><p className="text-slate-400 text-sm">Gestionale Cloud v9.0</p></div>
-                    
-                    {dbError && (
-                        <div className="bg-red-500 text-white p-4 rounded-xl mb-6 text-center max-w-sm shadow-lg border-2 border-red-300">
-                            <h3 className="font-bold text-lg mb-1">Errore Configurazione</h3>
-                            <p className="text-sm opacity-90">{dbError}</p>
-                            <p className="text-xs mt-2 font-mono bg-black/20 p-2 rounded">Apri il file HTML e inserisci URL e KEY corretti.</p>
-                        </div>
-                    )}
-
+                    <div className="mb-8 text-center"><h1 className="text-4xl font-bold mb-2">NOM <span className="text-orange-500">BUSINESS</span></h1><p className="text-slate-400 text-sm">Gestionale Cloud v9.5 (Fix)</p></div>
+                    {dbError && <div className="bg-red-500 text-white p-4 rounded-xl mb-6 text-center max-w-sm shadow-lg border-2 border-red-300"><h3 className="font-bold text-lg mb-1">Errore Configurazione</h3><p className="text-sm opacity-90">{dbError}</p></div>}
                     <div className="bg-white text-slate-800 p-8 rounded-3xl w-full max-w-sm shadow-2xl">
                         <h2 className="text-2xl font-bold mb-6 text-center">{isLogin ? 'Accedi' : 'Registrati'}</h2>
                         {error && <div className="bg-red-100 text-red-600 p-3 rounded-lg mb-4 text-sm font-medium text-center">{error}</div>}
@@ -212,7 +198,7 @@
 
         // --- APP PRINCIPALE ---
         function InventoryApp() {
-            // STATE
+            // STATE initialization
             const [currentUser, setCurrentUser] = useState(() => safeJSONParse('nom_cloud_user', null));
             const [items, setItems] = useState([]);
             const [categories, setCategories] = useState([]);
@@ -221,9 +207,12 @@
             const [printHistory, setPrintHistory] = useState([]);
             const [usersList, setUsersList] = useState([]);
             const [isLoading, setIsLoading] = useState(true);
-            const [isConfigured, setIsConfigured] = useState(true);
 
-            // UI
+            // Derived
+            const isAdmin = currentUser && currentUser.role === 'admin';
+            const cartItems = items.filter(i => i.quantity > 0);
+
+            // UI State
             const [activeTab, setActiveTab] = useState('dashboard');
             const [expandedCategories, setExpandedCategories] = useState({});
             const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -239,26 +228,23 @@
             const [printStep, setPrintStep] = useState(1);
             const [printSelection, setPrintSelection] = useState({ type: null, value: null });
             
-            // Forms
+            // Form State
             const [orderQty, setOrderQty] = useState(1);
             const [orderNote, setOrderNote] = useState('');
             const [commentText, setCommentText] = useState('');
             const [newCategoryName, setNewCategoryName] = useState('');
             const [newSupplierName, setNewSupplierName] = useState('');
 
-            // --- INIT ---
+            // --- SUPABASE SYNC ---
             useEffect(() => {
-                if (configError || !supabase) {
-                    setIsConfigured(false);
-                    setIsLoading(false);
-                    return;
+                if(!supabase || configError) { 
+                    setIsLoading(false); 
+                    return; 
                 }
-                
-                // Auth Check
+
                 const storedUser = localStorage.getItem('nom_cloud_user');
                 if(storedUser) setCurrentUser(JSON.parse(storedUser));
 
-                // Realtime
                 const channel = supabase.channel('room1')
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, fetchItems)
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, fetchCategories)
@@ -280,7 +266,6 @@
                 setIsLoading(false);
             };
 
-            // Fetchers
             const fetchItems = async () => { const { data } = await supabase.from('items').select('*').order('id'); if(data) setItems(data); };
             const fetchCategories = async () => { const { data } = await supabase.from('categories').select('*'); if(data && data.length > 0) setCategories(data.map(c => c.name)); else setCategories(defaultCategories); };
             const fetchSuppliers = async () => { const { data } = await supabase.from('suppliers').select('*'); if(data && data.length > 0) setSuppliers(data.map(s => s.name)); else setSuppliers(defaultSuppliers); };
@@ -288,18 +273,17 @@
             const fetchPrintHistory = async () => { const { data } = await supabase.from('print_history').select('*').order('id', { ascending: false }).limit(50); if(data) setPrintHistory(data); };
             const fetchUsers = async () => { const { data } = await supabase.from('app_users').select('username, role, id'); if(data) setUsersList(data); };
 
-            // Auth Handlers
+            // Auth Logic
             const handleLogin = async (username, password) => {
-                if(!supabase) throw new Error("Database non collegato");
+                if(!supabase) throw new Error("DB Error");
                 const { data, error } = await supabase.from('app_users').select('*').eq('username', username).eq('password', password).single();
                 if (error || !data) throw new Error("Credenziali errate");
                 const userObj = { username: data.username, role: data.role };
                 setCurrentUser(userObj);
                 localStorage.setItem('nom_cloud_user', JSON.stringify(userObj));
             };
-
             const handleRegister = async (username, password) => {
-                if(!supabase) throw new Error("Database non collegato");
+                if(!supabase) throw new Error("DB Error");
                 const { count } = await supabase.from('app_users').select('*', { count: 'exact', head: true });
                 if (count >= 20) throw new Error("Limite utenti raggiunto.");
                 const role = count < 2 ? 'admin' : 'standard';
@@ -307,15 +291,13 @@
                 if (error) throw new Error("Nome utente occupato.");
                 await handleLogin(username, password);
             };
-
             const handleLogout = () => { setCurrentUser(null); localStorage.removeItem('nom_cloud_user'); };
 
-            // CRUD Actions
+            // CRUD Logic
             const addLog = async (action, text, isComment = false) => {
                 const now = new Date();
                 await supabase.from('history').insert({ action, product_name: text, is_comment: isComment, "user": currentUser.username, timestamp: now.toLocaleDateString('it-IT'), time: now.toLocaleTimeString('it-IT', {hour: '2-digit', minute:'2-digit'}) });
             };
-
             const handleSaveItem = async (e) => {
                 e.preventDefault(); const formData = new FormData(e.target);
                 const newItem = { name: formData.get('name'), category: formData.get('category'), supplier: formData.get('supplier'), quantity: currentItem ? currentItem.quantity : 0, orders: currentItem ? currentItem.orders : [], price: 0 };
@@ -323,17 +305,34 @@
                 else { await supabase.from('items').insert(newItem); addLog('Nuovo', newItem.name); }
                 closeModal();
             };
-
             const handleDeleteItem = async (id, name) => { if (confirm('Eliminare articolo?')) { await supabase.from('items').delete().eq('id', id); addLog('Eliminato', name); if (isModalOpen) closeModal(); } };
-            const handleConfirmOrder = async () => { if (!currentItem || orderQty <= 0) return; const now = new Date(); const newOrder = { id: Date.now(), qty: orderQty, note: orderNote.trim(), date: now.toLocaleDateString('it-IT'), user: currentUser.username }; const currentOrders = currentItem.orders || []; await supabase.from('items').update({ quantity: (currentItem.quantity || 0) + orderQty, orders: [...currentOrders, newOrder] }).eq('id', currentItem.id); addLog('+', currentItem.name); setIsOrderModalOpen(false); setCurrentItem(null); };
-            const confirmPrint = async () => { const itemsToPrint = getItemsToPrint(); if (itemsToPrint.length === 0) return alert("Vuoto"); const now = new Date(); const printRecord = { date: now.toLocaleDateString('it-IT'), time: now.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}), "user": currentUser.username, type: printSelection.type, filter: printSelection.value || 'TUTTO', items: itemsToPrint.map(i => ({ name: i.name, qty: i.quantity, supplier: i.supplier, notes: i.orders.map(o => o.note).filter(n => n).join(', ') })) }; await supabase.from('print_history').insert(printRecord); for (const item of itemsToPrint) { await supabase.from('items').update({ quantity: 0, orders: [] }).eq('id', item.id); } addLog('STAMPA', `Ordine inviato (${printSelection.type})`); setIsPrintModalOpen(false); if(activeTab === 'cart') setActiveTab('dashboard'); };
+            const handleConfirmOrder = async () => {
+                if (!currentItem || orderQty <= 0) return;
+                const now = new Date();
+                const newOrder = { id: Date.now(), qty: orderQty, note: orderNote.trim(), date: now.toLocaleDateString('it-IT'), user: currentUser.username };
+                const currentOrders = currentItem.orders || [];
+                await supabase.from('items').update({ quantity: (currentItem.quantity || 0) + orderQty, orders: [...currentOrders, newOrder] }).eq('id', currentItem.id);
+                addLog('+', currentItem.name);
+                setIsOrderModalOpen(false); setCurrentItem(null);
+            };
+            const confirmPrint = async () => {
+                const itemsToPrint = getItemsToPrint();
+                if (itemsToPrint.length === 0) return alert("Nessun articolo.");
+                const now = new Date();
+                const printRecord = { date: now.toLocaleDateString('it-IT'), time: now.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}), "user": currentUser.username, type: printSelection.type, filter: printSelection.value || 'TUTTO', items: itemsToPrint.map(i => ({ name: i.name, qty: i.quantity, supplier: i.supplier, notes: i.orders.map(o => o.note).filter(n => n).join(', ') })) };
+                await supabase.from('print_history').insert(printRecord);
+                for (const item of itemsToPrint) { await supabase.from('items').update({ quantity: 0, orders: [] }).eq('id', item.id); }
+                addLog('STAMPA', `Ordine inviato (${printSelection.type})`);
+                setIsPrintModalOpen(false);
+                if(activeTab === 'cart') setActiveTab('dashboard');
+            };
             const handleAddCategory = async () => { if (newCategoryName && !categories.includes(newCategoryName.toUpperCase())) { await supabase.from('categories').insert({name: newCategoryName.toUpperCase()}); setNewCategoryName(''); } };
             const handleAddSupplier = async () => { if (newSupplierName && !suppliers.includes(newSupplierName)) { await supabase.from('suppliers').insert({name: newSupplierName}); setNewSupplierName(''); } };
+            const handleDeleteCategory = async (cat) => alert("Funzione disabilitata per sicurezza.");
+            const handleDeleteSupplier = async (sup) => alert("Funzione disabilitata per sicurezza.");
             const handleDeleteUser = async (username) => { if (username === currentUser.username) return; if(confirm('Eliminare '+username+'?')) await supabase.from('app_users').delete().eq('username', username); };
 
             // Helpers
-            const isAdmin = currentUser && currentUser.role === 'admin';
-            const cartItems = items.filter(i => i.quantity > 0);
             const groupedHistory = useMemo(() => { const groups = {}; history.forEach(log => { const dateKey = log.timestamp; if (!groups[dateKey]) groups[dateKey] = []; groups[dateKey].push(log); }); return groups; }, [history]);
             const groupedCartItems = useMemo(() => { if (cartGrouping === 'none') return { 'Tutti': cartItems }; const groups = {}; cartItems.forEach(item => { const key = cartGrouping === 'category' ? item.category : (item.supplier || 'N/D'); if (!groups[key]) groups[key] = []; groups[key].push(item); }); return groups; }, [cartItems, cartGrouping]);
             const getFriendlyDate = (dateStr) => { const t = new Date().toLocaleDateString('it-IT'); if (dateStr === t) return "Oggi"; return dateStr; };
@@ -346,11 +345,15 @@
             const handlePrintSelection = (type, value = null) => { if (type === 'ALL') { setPrintSelection({ type: 'ALL', value: null }); setPrintStep(3); } else if (value) { setPrintSelection({ type, value }); setPrintStep(3); } else { setPrintSelection({ type, value: null }); setPrintStep(2); } };
             const getItemsToPrint = () => { const { type, value } = printSelection; if (type === 'ALL') return cartItems; if (type === 'SUPPLIER') return cartItems.filter(i => i.supplier === value); if (type === 'CATEGORY') return cartItems.filter(i => i.category === value); return []; };
 
+            // Render Error or Auth
+            if (supabaseError === "CONFIG_MISSING") return <div className="flex h-screen items-center justify-center p-6 text-center"><div className="bg-red-50 p-6 rounded-xl border border-red-200"><h2 className="font-bold text-red-600 mb-2">Configurazione Mancante</h2><p className="text-sm">Apri il file HTML e inserisci URL e KEY di Supabase alle righe 63-64.</p></div></div>;
+            if (supabaseError === "LIB_MISSING" || supabaseError) return <div className="flex h-screen items-center justify-center p-6 text-center"><div className="bg-red-50 p-6 rounded-xl border border-red-200"><h2 className="font-bold text-red-600 mb-2">Errore Critico</h2><p className="text-sm">{supabaseError}</p></div></div>;
             if (isLoading) return <div className="flex h-screen items-center justify-center bg-slate-900 text-white animate-pulse">Connessione Cloud...</div>;
-            if (!currentUser || !isConfigured) return <AuthScreen onLogin={handleLogin} onRegister={handleRegister} usersList={usersList} dbError={configError} />;
+            if (!currentUser) return <AuthScreen onLogin={handleLogin} onRegister={handleRegister} usersList={usersList} dbError={configError} />;
 
             return (
                 <div className="flex flex-col h-full font-sans bg-gray-50 overflow-hidden relative">
+                    {/* SIDEBAR */}
                     {isSidebarOpen && (
                         <div className="fixed inset-0 z-50 flex">
                             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)}></div>
@@ -359,7 +362,13 @@
                                     <h2 className="text-2xl font-bold relative z-10">NOM</h2><p className="text-xs text-orange-400 mt-1 font-bold relative z-10">BUSINESS (Cloud)</p>
                                     <div className="mt-4 flex items-center gap-3 relative z-10">
                                         <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center"><Icon name="user" className="w-6 h-6 text-white"/></div>
-                                        <div><p className="text-sm font-bold">{currentUser.username}</p><div className="flex items-center gap-1 text-xs text-slate-400">{isAdmin && <Icon name="crown" className="w-3 h-3 text-yellow-400"/><span className="uppercase">{currentUser.role}</span>}</div></div>
+                                        <div>
+                                            <p className="text-sm font-bold">{currentUser.username}</p>
+                                            <div className="flex items-center gap-1 text-xs text-slate-400">
+                                                {isAdmin && <Icon name="crown" className="w-3 h-3 text-yellow-400"/>}
+                                                <span className="uppercase">{currentUser.role}</span>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-orange-600 rounded-full opacity-20 blur-xl"></div>
                                 </div>
@@ -439,7 +448,6 @@
                                 </div>
                             </div>
                         )}
-
                         {activeTab === 'admin' && isAdmin && (
                             <div className="animate-fade-in space-y-8 pb-10">
                                 <div className="bg-orange-100 p-4 rounded-xl border border-orange-200"><h2 className="font-bold text-orange-800 text-lg mb-1">Pannello Modifica</h2><p className="text-xs text-orange-700">Configurazione categorie e fornitori.</p></div>
@@ -447,7 +455,6 @@
                                 <div className="bg-white p-4 rounded-xl border border-slate-100"><h3 className="font-bold text-slate-800 mb-3 border-b pb-1 text-sm">Fornitori</h3><div className="flex gap-2 mb-4"><input className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-500" placeholder="Nuovo Fornitore" value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} /><button onClick={handleAddSupplier} className="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold">Agg.</button></div><div className="flex flex-wrap gap-2">{suppliers.map(sup => (<div key={sup} className="bg-slate-50 border border-slate-200 pl-3 pr-1 py-1 rounded-full text-xs flex items-center gap-2">{sup} <button onClick={() => handleDeleteSupplier(sup)} className="w-5 h-5 rounded-full hover:bg-red-100 text-slate-400 hover:text-red-500 flex items-center justify-center"><Icon name="close" className="w-3 h-3"/></button></div>))}</div></div>
                             </div>
                         )}
-
                         {activeTab === 'management' && isAdmin && (
                             <div className="animate-fade-in space-y-6 pb-10">
                                 <div className="bg-blue-50 p-4 rounded-xl border border-blue-100"><h2 className="font-bold text-blue-800 text-lg mb-1">Gestione Utenti</h2><p className="text-xs text-blue-600">Amministra gli account registrati.</p></div>
